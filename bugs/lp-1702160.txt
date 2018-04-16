@@ -1,0 +1,149 @@
+http://pad.lv/1702160
+https://bugs.launchpad.net/ubuntu/+source/cloud-init/+bug/1702160
+
+=== Begin SRU Template ===
+[Impact]
+Exception_cb continues to retry on 404 in OpenStack deployments. Wasted boot time on optional content retries when user-data isn't present.
+
+[Test Case]
+# Place an additional invalid URL in openstack metadata processing and make sure it only tries once and gives up on 404.
+# Add invalid additional URL to process
+sudo sed -i 's/files = {}/files = {'NOTHERE': (self._path_join('NOTHERE'),False, lambda x: x) }/' /usr/lib/python3/dist-packages/cloudinit/sources/helpers/openstack.py
+sudo cloud-init clean --logs --reboot;
+cloud-init status --wait --long; # Expect no errors
+# Pre-upgrade expect 6 retries and a 404 message 
+grep NOTHERE /var/log/cloud-init.log | wc -l   # expect 7
+sudo sed -i 's/ artful / artful-proposed /' /etc/apt/sources.list;
+sudo apt upgrade > /dev/null 2>&1;
+sud apt-get install cloud-init;
+sudo cloud-init clean --logs --reboot;
+sudo sed -i 's/files = {}/files = {'NOTHERE': (self._path_join('NOTHERE'),False, lambda x: x) }/' /usr/lib/python3/dist-packages/cloudinit/sources/helpers/openstack.py
+cloud-init status --wait --long; # Expect no errors
+# post-upgrade expect  1 attempt and 1 404 message
+grep NOTHERE /var/log/cloud-init.log | wc -l   # expect 2
+
+
+
+[Regression Potential]
+
+[Other Info]
+Upstream commit at
+  https://git.launchpad.net/cloud-init/commit/?id=XXXXXXXXXX
+
+=== End SRU Template ===
+
+
+=== START abridged validation on xenial ===
+# cloud-init 17.2.35 pre-upgrade
+root@xenial-test:~# cloud-init status --long
+status: done
+time: Mon, 16 Apr 2018 17:03:05 +0000
+detail:
+DataSourceOpenStack [net,ver=2]
+
+root@xenial-test:~# grep NOTHERE /var/log/cloud-init.log  | wc -l
+7
+
+root@xenial-test:~# grep NOTHERE /var/log/cloud-init.log 
+2018-04-16 17:02:58,961 - url_helper.py[DEBUG]: [0/6] open 'http://169.254.169.254/NOTHERE' with {'allow_redirects': True, 'method': 'GET', 'headers': {'User-Agent': 'Cloud-Init/18.2'}, 'url': 'http://169.254.169.254/NOTHERE', 'timeout': 10.0} configuration
+2018-04-16 17:02:58,969 - openstack.py[DEBUG]: Failed reading optional path http://169.254.169.254/NOTHERE due to: 404 Client Error: Not Found for url: http://169.254.169.254/NOTHERE
+
+root@xenial-test:~# grep NOTHERE /var/log/cloud-init.log  |wc -l
+2
+root@xenial-test:~# sudo cloud-init analyze show
+sudo: unable to resolve host xenial-test
+-- Boot Record 01 --
+The total time elapsed since completing an event is printed after the "@" character.
+The time the event takes is printed after the "+" character.
+
+Starting stage: init-local
+|`->no cache found @00.01100s +00.00000s
+|`->no local data found from DataSourceNoCloud @00.22500s +00.06400s
+|`->no local data found from DataSourceConfigDrive @00.28900s +00.03000s
+|`->no local data found from DataSourceOpenNebula @00.31900s +00.01000s
+|`->no local data found from DataSourceDigitalOcean @00.32900s +00.01100s
+|`->no local data found from DataSourceAzure @00.34000s +00.00900s
+|`->no local data found from DataSourceOVF @00.34900s +00.01400s
+|`->no local data found from DataSourceIBMCloud @00.36400s +00.00000s
+|`->no local data found from DataSourceCloudSigma @00.36400s +00.01000s
+|`->no local data found from DataSourceSmartOS @00.37400s +00.01000s
+|`->no local data found from DataSourceEc2Local @00.38400s +00.02000s
+|`->no local data found from DataSourceHetzner @00.40400s +00.01100s
+Finished stage: (init-local) 00.48000 seconds 
+
+Starting stage: init-network
+|`->no cache found @01.49800s +00.00100s
+|`->no network data found from DataSourceNoCloudNet @01.56900s +00.02600s
+|`->no network data found from DataSourceAltCloud @01.59500s +00.01100s
+|`->no network data found from DataSourceOVFNet @01.60600s +00.01600s
+|`->no network data found from DataSourceMAAS @01.62300s +00.00000s
+|`->no network data found from DataSourceGCE @01.62400s +00.02100s
+|`->found network data from DataSourceOpenStack @01.64500s +11.64800s
+|`->reading and applying user-data @13.44700s +00.01000s
+|`->reading and applying vendor-data @13.45700s +00.00000s
+|`->config-migrator ran successfully @13.88500s +00.00000s
+|`->config-seed_random ran successfully @13.88700s +00.00300s
+|`->config-bootcmd ran successfully @13.89000s +00.00100s
+|`->config-write-files ran successfully @13.89100s +00.00200s
+|`->config-growpart ran successfully @13.89300s +00.22900s
+|`->config-resizefs ran successfully @14.12300s +00.09000s
+|`->config-disk_setup ran successfully @14.21400s +00.00200s
+|`->config-mounts ran successfully @14.21800s +00.04900s
+|`->config-set_hostname ran successfully @14.26800s +00.00400s
+|`->config-update_hostname ran successfully @14.27200s +00.00200s
+|`->config-update_etc_hosts ran successfully @14.27500s +00.00000s
+|`->config-ca-certs ran successfully @14.27600s +00.00100s
+|`->config-rsyslog ran successfully @14.27800s +00.00100s
+|`->config-users-groups ran successfully @14.28000s +00.05200s
+|`->config-ssh ran successfully @14.33200s +00.27100s
+Finished stage: (init-network) 13.15700 seconds 
+
+Starting stage: modules-config
+|`->config-emit_upstart ran successfully @16.64900s +00.00200s
+|`->config-snap ran successfully @16.65100s +00.00200s
+|`->config-snap_config ran successfully @16.65300s +00.00200s
+|`->config-ssh-import-id ran successfully @16.65500s +00.00100s
+|`->config-locale ran successfully @16.65700s +00.00300s
+|`->config-set-passwords ran successfully @16.66000s +00.00100s
+|`->config-grub-dpkg ran successfully @16.66300s +00.82100s
+|`->config-apt-pipelining ran successfully @17.48500s +00.01800s
+|`->config-apt-configure ran successfully @17.50400s +00.26800s
+|`->config-ubuntu-advantage ran successfully @17.77200s +00.00400s
+|`->config-ntp ran successfully @17.77600s +00.00100s
+|`->config-timezone ran successfully @17.77800s +00.00100s
+|`->config-disable-ec2-metadata ran successfully @17.78000s +00.00000s
+|`->config-runcmd ran successfully @17.78100s +00.00100s
+|`->config-byobu ran successfully @17.78200s +00.00200s
+Finished stage: (modules-config) 01.20900 seconds 
+
+Starting stage: modules-final
+|`->config-snappy ran successfully @18.48000s +00.00400s
+|`->config-package-update-upgrade-install ran successfully @18.48500s +00.00100s
+|`->config-fan ran successfully @18.48600s +00.00200s
+|`->config-landscape ran successfully @18.48800s +00.00100s
+|`->config-lxd ran successfully @18.49000s +00.00100s
+|`->config-puppet ran successfully @18.49200s +00.00100s
+|`->config-chef ran successfully @18.49300s +00.00200s
+|`->config-mcollective ran successfully @18.49500s +00.00200s
+|`->config-salt-minion ran successfully @18.49700s +00.00100s
+|`->config-rightscale_userdata ran successfully @18.49900s +00.00100s
+|`->config-scripts-vendor ran successfully @18.50000s +00.00200s
+|`->config-scripts-per-once ran successfully @18.50300s +00.00100s
+|`->config-scripts-per-boot ran successfully @18.50400s +00.00100s
+|`->config-scripts-per-instance ran successfully @18.50500s +00.00200s
+|`->config-scripts-user ran successfully @18.50700s +00.00200s
+|`->config-ssh-authkey-fingerprints ran successfully @18.50900s +00.02400s
+|`->config-keys-to-console ran successfully @18.53500s +00.09000s
+|`->config-phone-home ran successfully @18.62800s +00.00100s
+|`->config-final-message ran successfully @18.63000s +00.00700s
+|`->config-power-state-change ran successfully @18.63700s +00.00400s
+Finished stage: (modules-final) 00.23000 seconds 
+
+Total Time: 15.07600 seconds
+
+1 boot records analyzed
+root@xenial-test:~# 
+
+
+=== START abridged validation on artful ===
+
